@@ -1,56 +1,44 @@
-# roscn.rsc
-with open("./chnroute-ipv4.txt", "r") as input_file:
-    lines = input_file.readlines()
+def process_file(input_filename, output_filename, before_text, after_text, header=None):
+    with open(input_filename, "r") as input_file:
+        lines = input_file.readlines()
 
-before_text = 'add address='
-after_text = ' list=CN'
+    new_lines = [before_text + line.strip() + after_text + "\n" for line in lines]
 
-new_lines = []
-for line in lines:
-    new_line = before_text + line.strip() + after_text + "\n"
-    new_lines.append(new_line)
+    if header:
+        new_lines = header + new_lines
 
-header = ['/ip firewall address-list remove [/ip firewall address-list find list=CN]\n', '/ip firewall address-list\n','add address=192.168.0.0/16 list=CN comment=private-network\n','add address=10.0.0.0/8 list=CN comment=private-network\n']
-header.extend(new_lines)
-
-with open("./cn.rsc", "w") as output_file:
-    output_file.writelines(header) 
+    with open(output_filename, "w") as output_file:
+        output_file.writelines(new_lines)
 
 # ipv6cidr
-with open("./chnroute-ipv6.txt", "r") as input_file:
-    lines = input_file.readlines()
-
-before_text = 'IP-CIDR,'
-after_text = ',no-resolve'
-
-new_lines = []
-for line in lines:
-    new_line = before_text + line.strip() + after_text + "\n"
-    new_lines.append(new_line)
-
 header = ['# 适用于 shadowrocket 等 ipv6 规则前缀为 IP-CIDR 的应用\n']
-header.extend(new_lines)
-
-with open("./ipv6.list", "w") as output_file:
-    output_file.writelines(header)
+process_file("./chnroute-ipv6.txt", "./ipv6.list", 'IP-CIDR,', ',no-resolve', header)
 
 # ipv6cidr6
-with open("./chnroute-ipv6.txt", "r") as input_file:
-    lines = input_file.readlines()
-
-before_text = 'IP-CIDR6,'
-after_text = ',no-resolve'
-
-new_lines = []
-for line in lines:
-    new_line = before_text + line.strip() + after_text + "\n"
-    new_lines.append(new_line)
-
 header = ['# 适用于 Loon、clash 等 ipv6 规则前缀为 IP-CIDR6 的应用\n']
-header.extend(new_lines)
+process_file("./chnroute-ipv6.txt", "./Loon/ruleset/ipv6.list", 'IP-CIDR6,', ',no-resolve', header)
 
-with open("./Loon/ruleset/ipv6.list", "w") as output_file:
-    output_file.writelines(header)
+# roscn.rsc
+def format_cidr(file_path, output_path):
+    with open(file_path, 'r') as f:
+        cidrs = [cidr.strip() for cidr in f.readlines()]
+
+    with open(output_path, 'w') as f:
+        f.write("/ip firewall address-list remove [/ip firewall address-list find list=CN]\n")
+        f.write("/ip firewall address-list\n")
+        f.write("add address=192.168.0.0/16 list=CN comment=private-network\n")
+        f.write("add address=10.0.0.0/8 list=CN comment=private-network\n")
+        f.write("\n:local cidrList {\n")
+        for cidr in cidrs[:-1]:
+            f.write(f'  "{cidr}";\n')
+        f.write(f'  "{cidrs[-1]}"\n')
+        f.write("}\n\n")
+        f.write(":foreach cidr in $cidrList do={\n")
+        f.write("  /ip firewall address-list add address=$cidr list=CN\n")
+        f.write("}")
+
+if __name__ == '__main__':
+    format_cidr('./chnroute-ipv4.txt', './cn.rsc')
 
 # acl
 a_content = '''# 默认代理
@@ -136,10 +124,6 @@ a_content = '''  "routing" : {
           "domain:log.tagtic.cn",
           "domain:pgdt.ugdtimg.com",
           "domain:sdownload.stargame.com",
-          "domain:wwads.cn",
-          "domain:gzads.com",
-          "domain:gozendata.com",
-          "domain:gz-data.com",
           "googleads",
           "pagead",
           "umeng",
@@ -180,7 +164,6 @@ a_content = '''  "routing" : {
       {
         "outboundTag" : "proxy",
         "domain" : [
-          "geosite:github",
           "geosite:netflix",
           "geosite:telegram",
           "geosite:geolocation-!cn",
@@ -199,7 +182,6 @@ a_content = '''  "routing" : {
           "tdesktop.com",
           "instagram",
           "twimg",
-          "steam",
           "v2ex"
         ],
         "type" : "field"
@@ -246,18 +228,12 @@ with open("./chnroute.txt", "r") as b_file:
         lines= b_file.readlines()
 
 before_text = "          \""
-after_text = "\","
+after_text = "\"," 
 
-new_lines = []
-for line in lines:
-    new_line = before_text + line.strip() + after_text + "\n"
-    new_lines.append(new_line)
+new_lines = [before_text + line.strip() + after_text for line in lines]
 
-b2_content = ''
-for line in new_lines:
-  b2_content += line
-b1_content = b2_content.rstrip()
-b_content = b1_content[:-1]
+b2_content = '\n'.join(new_lines).rstrip(',') 
+b_content = b2_content 
 
 new_content = a_content + "\n" + b_content + c_content
 
